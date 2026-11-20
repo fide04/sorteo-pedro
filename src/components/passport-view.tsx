@@ -12,6 +12,7 @@ import { StubText, Ticket } from "@/components/ticket";
 import { CountUp } from "@/components/fx/count-up";
 import { Tilt } from "@/components/fx/tilt";
 import { WantedStars } from "@/components/vice";
+import { ContestVideo } from "@/components/contest-video";
 import { formatDate, RAFFLE } from "@/lib/config";
 import type { Passport } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ export function PassportView({
   justStore,
   gained,
   pendingVideo,
+  contestUrl,
   shareFile,
   checkinId,
 }: {
@@ -30,6 +32,7 @@ export function PassportView({
   justStore?: string;
   gained?: number;
   pendingVideo?: boolean;
+  contestUrl?: string | null;
   shareFile?: File | null;
   checkinId?: string | null;
 }) {
@@ -104,6 +107,8 @@ export function PassportView({
           ))}
         </ul>
       </section>
+
+      {contestUrl && <ContestVideo url={contestUrl} compact />}
 
       {claimId && <InstagramCard checkinId={claimId} shareFile={shareFile} caption={caption} />}
     </div>

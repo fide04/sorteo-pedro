@@ -5,17 +5,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClosingForm } from "@/components/admin/closing-form";
-import { allRanked, getClosesAt } from "@/lib/data";
-import { formatDate, localDay, raffleClosed, TZ } from "@/lib/config";
+import { allRanked, getRaffleDates } from "@/lib/data";
+import { daysUntil, formatDate, raffleClosed, raffleNotStarted, TZ } from "@/lib/config";
 import { db } from "@/lib/supabase";
 
 type Draw = { id: string; status: string; note: string | null; created_at: string; winner_points: number; total_points: number; total_participants: number; participants: { full_name: string; cedula: string } | null };
 
 export default async function Sorteo() {
-  const [ranked, closesAt] = await Promise.all([allRanked(), getClosesAt()]);
+  const [ranked, dates] = await Promise.all([allRanked(), getRaffleDates()]);
+  const { closesAt, startsAt, announceAt } = dates;
   const pool = ranked.filter((p) => p.points > 0 && !p.disqualified);
   const closed = raffleClosed(closesAt);
-  const daysLeft = Math.round((Date.parse(closesAt) - Date.parse(localDay())) / 86400000) + 1;
+  const notStarted = raffleNotStarted(startsAt);
+  const daysLeft = daysUntil(closesAt) + 1;
   const { data } = await db()
     .from("draws")
     .select("id,status,note,created_at,winner_points,total_points,total_participants,participants(full_name,cedula)")
@@ -27,18 +29,20 @@ export default async function Sorteo() {
     <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle>Fecha de cierre</CardTitle>
+          <CardTitle>Fechas y video del concurso</CardTitle>
           <CardDescription>
-            {closed
-              ? `El sorteo cerró el ${formatDate(closesAt)}. Los QR ya no aceptan fotos ni videos.`
-              : `Abierto hasta el ${formatDate(closesAt)} inclusive (${daysLeft === 1 ? "hoy es el último día" : `quedan ${daysLeft} días`}). Al pasar esa fecha los QR dejan de aceptar registros y se habilita el sorteo.`}
+            {notStarted
+              ? `Todavía no empieza: abre el ${formatDate(startsAt)} y cierra el ${formatDate(closesAt)}. Mientras tanto los QR muestran cuándo empieza.`
+              : closed
+                ? `El sorteo cerró el ${formatDate(closesAt)}. Los QR ya no aceptan fotos ni videos. Anuncio del ganador: ${formatDate(announceAt)}.`
+                : `Abierto hasta el ${formatDate(closesAt)} inclusive (${daysLeft === 1 ? "hoy es el último día" : `quedan ${daysLeft} días`}). Anuncio del ganador: ${formatDate(announceAt)}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ClosingForm closesAt={closesAt} />
+          <ClosingForm dates={dates} />
         </CardContent>
       </Card>
-      <DrawPanel people={pool.length} tickets={pool.reduce((a, p) => a + p.points, 0)} closed={closed} closesLabel={formatDate(closesAt)} />
+      <DrawPanel people={pool.length} tickets={pool.reduce((a, p) => a + p.points, 0)} closed={closed} closesLabel={formatDate(closesAt)} contestUrl={dates.contestUrl} />
       <Card>
         <CardHeader>
           <CardTitle>Historial</CardTitle>

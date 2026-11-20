@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { allRanked, getClosesAt } from "@/lib/data";
+import { parseInstagramUrl } from "@/lib/validation";
 import { formatDate, localDay, raffleClosed } from "@/lib/config";
 import { adminAccounts, checkLogin, currentAdmin, endSession, requireAdmin, startSession } from "@/lib/session";
 import { BUCKET, db } from "@/lib/supabase";
@@ -219,18 +220,43 @@ export async function runDraw(excludePrevious: boolean): Promise<DrawResult> {
   };
 }
 
-// ---------- fecha de cierre ----------
-export async function setClosesAt(_: unknown, fd: FormData) {
+// ---------- fechas y video del concurso ----------
+export async function setRaffleSettings(_: unknown, fd: FormData) {
   await requireAdmin();
-  const v = String(fd.get("closesAt") ?? "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) return { error: "Elige una fecha válida.", ok: false };
-  const { error } = await db().from("settings").upsert({ key: "closes_at", value: v, updated_at: new Date().toISOString() });
-  if (error) return { error: "No se pudo guardar la fecha.", ok: false };
+  const day = (k: string) => {
+    const v = String(fd.get(k) ?? "");
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null;
+  };
+  const startsAt = day("startsAt"), closesAt = day("closesAt"), announceAt = day("announceAt");
+  if (!startsAt || !closesAt || !announceAt) return { ok: false, error: "Completa las tres fechas.", note: "" };
+  if (closesAt < startsAt) return { ok: false, error: "El cierre no puede ser antes del inicio.", note: "" };
+  if (announceAt <= closesAt) return { ok: false, error: "El anuncio del ganador debe ser después del cierre.", note: "" };
+
+  const rawUrl = String(fd.get("contestUrl") ?? "").trim();
+  let contestUrl = "";
+  if (rawUrl) {
+    const link = parseInstagramUrl(rawUrl);
+    if (!link || link.type === "story") return { ok: false, error: "Pega el enlace de la publicación o reel del video (instagram.com/reel/… o /p/…).", note: "" };
+    contestUrl = link.url;
+  }
+
+  const now = new Date().toISOString();
+  const rows = [
+    { key: "starts_at", value: startsAt, updated_at: now },
+    { key: "closes_at", value: closesAt, updated_at: now },
+    { key: "announce_at", value: announceAt, updated_at: now },
+  ];
+  const sb = db();
+  const { error } = await sb.from("settings").upsert(rows);
+  if (error) return { ok: false, error: "No se pudo guardar.", note: "" };
+  if (contestUrl) await sb.from("settings").upsert({ key: "contest_post_url", value: contestUrl, updated_at: now });
+  else await sb.from("settings").delete().eq("key", "contest_post_url");
   revalidatePath("/", "layout");
+  const today = localDay();
   return {
-    error: "",
     ok: true,
-    note: v < localDay() ? "Ojo: esa fecha ya pasó, así que el sorteo queda cerrado desde ahora." : "",
+    error: "",
+    note: closesAt < today ? "Guardado. Ojo: el cierre ya pasó, así que el sorteo queda cerrado." : startsAt > today ? `Guardado. El sorteo abre el ${formatDate(startsAt)}.` : "Guardado.",
   };
 }
 

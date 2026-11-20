@@ -10,7 +10,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RAFFLE } from "@/lib/config";
 
-export function DrawPanel({ people, tickets, closed, closesLabel }: { people: number; tickets: number; closed: boolean; closesLabel: string }) {
+export function DrawPanel({
+  people,
+  tickets,
+  closed,
+  closesLabel,
+  contestUrl,
+}: {
+  people: number;
+  tickets: number;
+  closed: boolean;
+  closesLabel: string;
+  contestUrl: string | null;
+}) {
   const [exclude, setExclude] = useState(true);
   const [result, setResult] = useState<DrawResult | null>(null);
   const [pending, start] = useTransition();
@@ -75,8 +87,28 @@ export function DrawPanel({ people, tickets, closed, closesLabel }: { people: nu
                 <Info k="Probabilidad" v={`${(win.chance * 100).toFixed(2)} %`} />
               </dl>
 
+              {contestUrl && (
+                <div className="bg-muted rounded-lg p-3 text-sm">
+                  <p className="font-bold">1. ¿Comentó el video del concurso?</p>
+                  <p className="text-muted-foreground">
+                    Busca a{" "}
+                    {win.instagram ? (
+                      <a href={`https://instagram.com/${win.instagram}`} target="_blank" rel="noreferrer" className="text-secondary font-semibold underline">
+                        @{win.instagram}
+                      </a>
+                    ) : (
+                      <b>(no dejó usuario de Instagram)</b>
+                    )}{" "}
+                    en los comentarios del{" "}
+                    <a href={contestUrl} target="_blank" rel="noreferrer" className="text-secondary font-semibold underline">
+                      video del concurso
+                    </a>
+                    .
+                  </p>
+                </div>
+              )}
               <div>
-                <p className="font-bold">Revisa que cumpla: {win.media.length} registros</p>
+                <p className="font-bold">{contestUrl ? "2. " : ""}Revisa que cumpla: {win.media.length} registros</p>
                 <p className="text-muted-foreground text-sm">
                   Cada foto o video debe ser en la tienda, con la persona en cámara; los videos, mostrando su emoción por el {RAFFLE.prize}.
                 </p>

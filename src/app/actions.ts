@@ -4,8 +4,8 @@ import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db, BUCKET } from "@/lib/supabase";
-import { localDay, RAFFLE, raffleClosed } from "@/lib/config";
-import { firstName, getClosesAt, getPassport, storeByToken } from "@/lib/data";
+import { formatDate, localDay, RAFFLE, raffleClosed, raffleNotStarted } from "@/lib/config";
+import { firstName, getPassport, getRaffleDates, storeByToken } from "@/lib/data";
 import { clearParticipant, getParticipantId, setParticipant } from "@/lib/session";
 import { cedulaSchema, newParticipantSchema, parseInstagramUrl, phoneSchema } from "@/lib/validation";
 import type { Passport } from "@/lib/types";
@@ -72,7 +72,7 @@ const MEDIA = {
 type Kind = keyof typeof MEDIA;
 const extFor = (t: string) => ({ "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" })[t] ?? "jpg";
 
-async function resolveParticipant(fd: FormData): Promise<{ ok: true; id: string } | Fail> {
+async function resolveParticipant(fd: FormData, requireInstagram = false): Promise<{ ok: true; id: string } | Fail> {
   const sb = db();
   const sessionId = await getParticipantId();
   if (sessionId) {
@@ -100,6 +100,7 @@ async function resolveParticipant(fd: FormData): Promise<{ ok: true; id: string 
     acceptRules: fd.get("acceptRules") ?? undefined,
   });
   if (!extra.success) return fail(extra.error.issues[0].message);
+  if (requireInstagram && !extra.data.instagram) return fail("Escribe tu usuario de Instagram: lo necesitamos para verificar tu comentario en el video del concurso.");
   const { data: created, error } = await sb
     .from("participants")
     .insert({ cedula: ced.data, phone: tel.data, full_name: extra.data.fullName, instagram: extra.data.instagram })
@@ -113,7 +114,9 @@ async function resolveParticipant(fd: FormData): Promise<{ ok: true; id: string 
 export async function startCheckin(fd: FormData): Promise<
   { ok: true; upload: { url: string; path: string }; thumb: { url: string; path: string } | null } | Fail
 > {
-  if (raffleClosed(await getClosesAt())) return fail("El sorteo ya cerró. ¡Gracias por participar!");
+  const dates = await getRaffleDates();
+  if (raffleNotStarted(dates.startsAt)) return fail(`El sorteo empieza el ${formatDate(dates.startsAt)}. ¡Te esperamos!`);
+  if (raffleClosed(dates.closesAt)) return fail("El sorteo ya cerró. ¡Gracias por participar!");
   const store = await storeByToken(String(fd.get("token") ?? ""));
   if (!store) return fail("Este código QR no es válido. Escanea el cartel de la tienda otra vez.");
 
@@ -125,7 +128,7 @@ export async function startCheckin(fd: FormData): Promise<
   if (!(spec.types as readonly string[]).includes(type)) return fail(kind === "video" ? "El video debe ser MP4, MOV o WEBM." : "La foto debe ser JPG, PNG o WEBP.");
   if (!size || size > spec.max) return fail(kind === "video" ? "El video pesa demasiado (máximo 60 MB). Graba uno más corto." : "La foto pesa demasiado.");
 
-  const who = await resolveParticipant(fd);
+  const who = await resolveParticipant(fd, !!dates.contestUrl);
   if (!who.ok) return who;
   await setParticipant(who.id);
 
@@ -152,7 +155,10 @@ export async function finishCheckin(input: { token: string; path: string; thumbP
 > {
   const pid = await getParticipantId();
   if (!pid) return fail("Tu sesión expiró. Vuelve a escanear el QR.");
-  if (raffleClosed(await getClosesAt())) return fail("El sorteo ya cerró. ¡Gracias por participar!");
+  {
+    const d = await getRaffleDates();
+    if (raffleNotStarted(d.startsAt) || raffleClosed(d.closesAt)) return fail("El sorteo no está abierto en este momento.");
+  }
   const store = await storeByToken(input.token);
   if (!store) return fail("Este código QR no es válido.");
   if (!MEDIA[input.kind]) return fail("Tipo de archivo no válido.");

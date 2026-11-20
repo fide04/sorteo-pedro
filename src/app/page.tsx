@@ -6,14 +6,14 @@ import { WantedStars } from "@/components/vice";
 import { Button } from "@/components/ui/button";
 import { GalleryGrid, RankingList } from "@/components/gallery";
 import { Live } from "@/components/fx/live";
-import { activeStores, getClosesAt, publicGallery, publicRanking, publicWinner } from "@/lib/data";
-import { formatDate, localDay, RAFFLE, raffleClosed } from "@/lib/config";
+import { ContestVideo } from "@/components/contest-video";
+import { activeStores, getRaffleDates, publicGallery, publicRanking, publicWinner } from "@/lib/data";
+import { daysUntil, formatDate, RAFFLE, raffleClosed, raffleNotStarted } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
-const steps = [
-  { title: "Busca el cartel", text: "Está en la entrada o junto a la caja de cada tienda TechnoCell." },
-  { title: "Escanea el código QR", text: "Con la cámara de tu teléfono. No tienes que instalar nada." },
+const baseSteps = [
+  { title: "Escanea el QR en la tienda", text: "Está en la entrada o junto a la caja de cada tienda TechnoCell. Usa la cámara del teléfono." },
   {
     title: "Sube una foto o un video",
     text: `Que sea creativo: sale en la galería. Foto suma ${RAFFLE.points.photo} puntos y video ${RAFFLE.points.video}.`,
@@ -21,16 +21,31 @@ const steps = [
 ];
 
 export default async function Home() {
-  const [stores, gallery, ranking, closesAt, winner] = await Promise.all([
+  const [stores, gallery, ranking, dates, winner] = await Promise.all([
     activeStores(),
     publicGallery(8),
     publicRanking(10),
-    getClosesAt(),
+    getRaffleDates(),
     publicWinner(),
   ]);
+  const { closesAt, startsAt, announceAt, contestUrl } = dates;
   const closed = raffleClosed(closesAt);
-  const daysLeft = Math.round((Date.parse(closesAt) - Date.parse(localDay())) / 86400000) + 1;
-  const countdown = closed ? "Cerrado" : daysLeft === 1 ? "Último día" : `Quedan ${daysLeft} días`;
+  const notStarted = raffleNotStarted(startsAt);
+  const toStart = daysUntil(startsAt);
+  const daysLeft = daysUntil(closesAt) + 1;
+  const countdown = closed
+    ? "Cerrado"
+    : notStarted
+      ? toStart === 1
+        ? "Empieza mañana"
+        : `Empieza en ${toStart} días`
+      : daysLeft === 1
+        ? "Último día"
+        : `Quedan ${daysLeft} días`;
+  const steps = [
+    ...(contestUrl ? [{ title: "Comenta el video del concurso", text: `En nuestro Instagram @${RAFFLE.instagram}. Es requisito para ganar.` }] : []),
+    ...baseSteps,
+  ];
   const p = RAFFLE.points;
   const closes = formatDate(closesAt);
 
@@ -49,7 +64,8 @@ export default async function Home() {
     "Antes de entregar el premio revisamos todas las fotos y videos del ganador. Si no cumplen, se anula y se sortea de nuevo.",
     "Una foto o video ofensivo se quita de la galería en cualquier momento.",
     "Las publicaciones de Instagram se suman cuando el equipo las confirma.",
-    `El sorteo cierra el ${closes}. Al ganador lo llamamos al teléfono que registró.`,
+    ...(contestUrl ? [`Para ganar hay que comentar el video del concurso en @${RAFFLE.instagram}. No suma puntos, pero lo revisamos antes de entregar el premio.`] : []),
+    `Se participa del ${formatDate(startsAt)} al ${closes}. Anunciamos al ganador el ${formatDate(announceAt)} y lo llamamos al teléfono que registró.`,
   ];
 
   return (
@@ -90,8 +106,8 @@ export default async function Home() {
                 <dd className="font-narrow text-2xl font-bold">{stores.length}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">{closed ? "Cerró" : "Cierra"}</dt>
-                <dd className="font-narrow text-2xl leading-tight font-bold">{closes}</dd>
+                <dt className="text-muted-foreground">{notStarted ? "Empieza" : closed ? "Cerró" : "Cierra"}</dt>
+                <dd className="font-narrow text-2xl leading-tight font-bold">{notStarted ? formatDate(startsAt) : closes}</dd>
                 <dd className="text-pink text-sm font-bold">{countdown}</dd>
               </div>
             </dl>
@@ -121,12 +137,16 @@ export default async function Home() {
             ) : (
               <>
                 <p className="font-wide text-2xl font-extrabold sm:text-3xl">El sorteo cerró el {closes}</p>
-                <p className="mt-2 text-white/80">Estamos revisando las fotos y videos. Pronto anunciamos al ganador aquí y en @{RAFFLE.instagram}.</p>
+                <p className="mt-2 text-white/80">
+                  Estamos revisando las fotos y videos. Anunciamos al ganador el {formatDate(announceAt)} aquí y en @{RAFFLE.instagram}.
+                </p>
               </>
             )}
           </div>
         </section>
       )}
+
+      {contestUrl && !closed && <ContestVideo url={contestUrl} className="mt-12" />}
 
       <section className="py-14" aria-labelledby="como">
         <h2 id="como" className="font-wide text-2xl font-extrabold tracking-tight sm:text-3xl">

@@ -4,7 +4,10 @@ export const RAFFLE = {
   prize: "GTA 6",
   instagram: "technocell2015", // sin @
   hashtag: "#SorteoTechnoCell",
-  closesAt: "2026-11-27", // fecha de cierre por defecto; se cambia desde el panel (Sorteo → Fecha de cierre)
+  // Valores por defecto: se cambian desde el panel (Sorteo → Fechas y video del concurso)
+  startsAt: "2026-11-21", // primer día para participar
+  closesAt: "2026-12-03", // último día para participar
+  announceAt: "2026-12-04", // día en que se anuncia al ganador
   points: { photo: 2, video: 4, allStoresBonus: 10, post: 2 },
   maxVideoSeconds: 30,
 } as const;
@@ -26,6 +29,18 @@ export function localDay(d = new Date()) {
 /** El último día para participar es `closesAt` (inclusive). Cierra al terminar ese día en RAFFLE_TZ. */
 export function raffleClosed(closesAt: string, now = new Date()) {
   return localDay(now) > closesAt;
+}
+
+/** Aún no empieza: hoy es antes de `startsAt`. */
+export function raffleNotStarted(startsAt: string, now = new Date()) {
+  return localDay(now) < startsAt;
+}
+
+export type RaffleDates = { startsAt: string; closesAt: string; announceAt: string; contestUrl: string | null };
+
+/** Días que faltan para una fecha (0 = hoy). */
+export function daysUntil(day: string) {
+  return Math.round((Date.parse(day) - Date.parse(localDay())) / 86400000);
 }
 
 export function formatDate(d: string | Date) {

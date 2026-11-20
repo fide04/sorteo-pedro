@@ -1,7 +1,7 @@
 import { LookupForm } from "@/components/lookup-form";
 import { Live } from "@/components/fx/live";
 import { SiteShell } from "@/components/site-shell";
-import { getPassport } from "@/lib/data";
+import { getPassport, getRaffleDates } from "@/lib/data";
 import { getParticipantId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const metadata = { title: "Mis puntos | Sorteo TechnoCell" };
 
 export default async function MisPuntos() {
   const pid = await getParticipantId();
-  const passport = pid ? await getPassport(pid) : null;
+  const [passport, dates] = await Promise.all([pid ? getPassport(pid) : null, getRaffleDates()]);
   return (
     <SiteShell
       band={
@@ -19,7 +19,7 @@ export default async function MisPuntos() {
       }
     >
       <div className="mx-auto -mt-10 max-w-md">
-        <LookupForm initial={passport} />
+        <LookupForm initial={passport} contestUrl={dates.contestUrl} />
         {passport && <Live seconds={45} label={false} />}
       </div>
     </SiteShell>

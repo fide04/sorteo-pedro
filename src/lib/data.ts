@@ -1,13 +1,26 @@
 import "server-only";
 import { db } from "./supabase";
-import { RAFFLE } from "./config";
+import { RAFFLE, type RaffleDates } from "./config";
 import { BUCKET } from "./supabase";
 import type { GalleryItem, Passport, ParticipantPoints, PublicStore, RankRow, Store } from "./types";
 
-/** Fecha de cierre vigente: la del panel si existe, si no la de config.ts. */
+const isDay = (v?: string | null) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** Fechas y video del concurso: lo guardado en el panel, o los valores de config.ts. */
+export async function getRaffleDates(): Promise<RaffleDates> {
+  const { data } = await db().from("settings").select("key,value").in("key", ["starts_at", "closes_at", "announce_at", "contest_post_url"]);
+  const v = new Map((data ?? []).map((r) => [r.key, r.value as string]));
+  return {
+    startsAt: isDay(v.get("starts_at")) ? v.get("starts_at")! : RAFFLE.startsAt,
+    closesAt: isDay(v.get("closes_at")) ? v.get("closes_at")! : RAFFLE.closesAt,
+    announceAt: isDay(v.get("announce_at")) ? v.get("announce_at")! : RAFFLE.announceAt,
+    contestUrl: v.get("contest_post_url") || null,
+  };
+}
+
+/** Fecha de cierre vigente. */
 export async function getClosesAt(): Promise<string> {
-  const { data } = await db().from("settings").select("value").eq("key", "closes_at").maybeSingle();
-  return data?.value && /^\d{4}-\d{2}-\d{2}$/.test(data.value) ? data.value : RAFFLE.closesAt;
+  return (await getRaffleDates()).closesAt;
 }
 
 export async function activeStores(): Promise<PublicStore[]> {

@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 type Step = "id" | "datos" | "foto" | "listo";
 
-export function CheckinFlow({ token, storeName, known }: { token: string; storeName: string; known: string | null }) {
+export function CheckinFlow({ token, storeName, known, contestUrl }: { token: string; storeName: string; known: string | null; contestUrl: string | null }) {
   const [step, setStep] = useState<Step>(known ? "foto" : "id");
   const [name, setName] = useState<string | null>(known);
   const [isNew, setIsNew] = useState(false);
@@ -59,6 +59,7 @@ export function CheckinFlow({ token, storeName, known }: { token: string; storeN
     e.preventDefault();
     setError("");
     if (form.fullName.trim().split(/\s+/).length < 2) return setError("Escribe tu nombre y apellido.");
+    if (contestUrl && !form.instagram.trim()) return setError("Escribe tu usuario de Instagram: lo usamos para verificar tu comentario en el video del concurso.");
     if (!accept) return setError("Debes aceptar las reglas para participar.");
     setName(form.fullName.trim().split(/\s+/)[0]);
     setStep("foto");
@@ -157,7 +158,15 @@ export function CheckinFlow({ token, storeName, known }: { token: string; storeN
   if (step === "listo" && result)
     return (
       <div className="pt-16">
-        <PassportView passport={result.passport} justStore={storeName} gained={result.gained} pendingVideo={result.pendingVideo} shareFile={result.share} checkinId={result.checkinId} />
+        <PassportView
+          passport={result.passport}
+          justStore={storeName}
+          gained={result.gained}
+          pendingVideo={result.pendingVideo}
+          shareFile={result.share}
+          checkinId={result.checkinId}
+          contestUrl={contestUrl}
+        />
       </div>
     );
 
@@ -204,9 +213,18 @@ export function CheckinFlow({ token, storeName, known }: { token: string; storeN
           <Field id="fullName" label="Nombre y apellido">
             <Input id="fullName" autoComplete="name" value={form.fullName} onChange={set("fullName")} required />
           </Field>
-          <Field id="instagram" label="Usuario de Instagram (opcional)">
-            <Input id="instagram" placeholder="@usuario" autoCapitalize="none" value={form.instagram} onChange={set("instagram")} />
+          <Field
+            id="instagram"
+            label={contestUrl ? "Usuario de Instagram" : "Usuario de Instagram (opcional)"}
+            hint={contestUrl ? "Lo usamos para verificar tu comentario en el video del concurso, que es requisito para ganar." : undefined}
+          >
+            <Input id="instagram" placeholder="@usuario" autoCapitalize="none" value={form.instagram} onChange={set("instagram")} required={!!contestUrl} />
           </Field>
+          {contestUrl && (
+            <a href={contestUrl} target="_blank" rel="noreferrer" className="text-violet inline-block text-sm font-semibold underline underline-offset-2">
+              Ver y comentar el video del concurso
+            </a>
+          )}
           <label className="flex cursor-pointer items-start gap-3 pt-1 text-[15px] leading-snug">
             <Checkbox checked={accept} onCheckedChange={(v) => setAccept(v === true)} className="mt-0.5" />
             <span>

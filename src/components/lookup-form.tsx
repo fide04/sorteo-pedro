@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { PassportView } from "@/components/passport-view";
 import type { Passport } from "@/lib/types";
 
-export function LookupForm({ initial }: { initial: Passport | null }) {
+export function LookupForm({ initial, contestUrl = null }: { initial: Passport | null; contestUrl?: string | null }) {
   const [passport, setPassport] = useState(initial);
   // al actualizarse en vivo (puntos aprobados), tomamos los datos nuevos del servidor
   useEffect(() => {
@@ -23,7 +23,7 @@ export function LookupForm({ initial }: { initial: Passport | null }) {
   if (passport)
     return (
       <div className="pt-16">
-        <PassportView passport={passport} />
+        <PassportView passport={passport} contestUrl={contestUrl} />
         <Button
           variant="link"
           className="text-muted-foreground mt-6 w-full"
