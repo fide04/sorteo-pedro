@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 /**
  * Un solo script liviano para todo el movimiento ligado al scroll:
- *  - parallax de las capas [data-depth] de la escena
+ *  - atardecer ligado al scroll (sol que se pone, cielo que oscurece)
  *  - entrada escalonada de [data-reveal] que están fuera de pantalla al cargar
  *  - conteo animado de [data-count]
  * Lo que ya se ve al cargar no se oculta nunca (no retrasa la primera pintura).
@@ -13,18 +13,24 @@ export function SceneMotion() {
   useEffect(() => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    // Parallax
-    const layers = [...document.querySelectorAll<HTMLElement>("[data-depth]")];
+    // Atardecer: el progreso del scroll sobre la escena (0 → 1) va en --dusk.
+    // El sol baja detrás del mar, el cielo se oscurece y se prenden las ventanas de la ciudad.
+    const band = document.querySelector<HTMLElement>(".vice-sky");
     let raf = 0;
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const y = scrollY;
-        if (y > innerHeight * 1.2) return;
-        for (const l of layers) l.style.transform = `translate3d(0, ${(y * Number(l.dataset.depth)).toFixed(1)}px, 0)`;
+        if (!band) return;
+        // 0 mientras la escena se ve completa abajo de la pantalla; 1 cuando ya subió y está por salir.
+        const bottom = band.getBoundingClientRect().bottom;
+        const p = Math.min(1, Math.max(0, (innerHeight - bottom) / (Math.min(band.offsetHeight, innerHeight) * 0.75)));
+        band.style.setProperty("--dusk", p.toFixed(3));
       });
     };
-    if (layers.length) addEventListener("scroll", onScroll, { passive: true });
+    if (band) {
+      addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    }
 
     // Conteo
     const count = (el: HTMLElement) => {

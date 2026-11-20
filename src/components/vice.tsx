@@ -26,7 +26,15 @@ function Skyline({ x, heights }: { x: number; heights: number[] }) {
     <g fill="#4a1170" opacity="0.9">
       {heights.map((h, i) => {
         const w = 14 + ((i * 7) % 12);
-        const r = <rect key={i} x={cx} y={232 - h} width={w} height={h} />;
+        const r = (
+          <g key={i}>
+            <rect x={cx} y={232 - h} width={w} height={h} />
+            {h > 36 &&
+              Array.from({ length: Math.floor((h - 12) / 12) }, (_, k) => (
+                <rect key={k} className="window" x={cx + 4} y={232 - h + 6 + k * 12} width={w - 8} height="3" fill="#ffd25a" />
+              ))}
+          </g>
+        );
         cx += w + 2;
         return r;
       })}
@@ -38,7 +46,7 @@ export function ViceScene({ className, compact = false }: { className?: string; 
   return (
     <div className={className} aria-hidden>
       {/* sol, ciudad y mar: se recorta a los lados en pantallas angostas */}
-      <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 size-full" data-depth="0.18">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 size-full">
         <defs>
           <linearGradient id="vs-sun" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#ffd25a" />
@@ -58,10 +66,15 @@ export function ViceScene({ className, compact = false }: { className?: string; 
             </g>
           </mask>
         </defs>
-        <circle cx="600" cy="232" r="190" fill="#ff8a3d" opacity="0.18" className="sun-glow" />
-        <circle cx="600" cy="232" r="140" fill="url(#vs-sun)" mask="url(#vs-slats)" />
-        <Skyline x={360} heights={[22, 48, 30, 70, 40, 26, 56, 34]} />
-        <Skyline x={680} heights={[30, 62, 38, 80, 28, 52, 24, 44]} />
+        {/* al hacer scroll el sol se hunde detrás del mar (ver .sun-set en globals.css) */}
+        <g className="sun-set">
+          <circle cx="600" cy="232" r="190" fill="#ff8a3d" opacity="0.18" className="sun-glow" />
+          <circle cx="600" cy="232" r="140" fill="url(#vs-sun)" mask="url(#vs-slats)" />
+        </g>
+        <g className="city-lights">
+          <Skyline x={360} heights={[22, 48, 30, 70, 40, 26, 56, 34]} />
+          <Skyline x={680} heights={[30, 62, 38, 80, 28, 52, 24, 44]} />
+        </g>
         <rect y="232" width="1200" height="68" fill="url(#vs-sea)" />
         {[0, 1, 2, 3, 4].map((i) => (
           <rect
@@ -79,13 +92,13 @@ export function ViceScene({ className, compact = false }: { className?: string; 
         ))}
       </svg>
       {/* palmeras ancladas a los bordes: siempre visibles, también en el celular */}
-      <svg viewBox="0 0 260 300" preserveAspectRatio="xMinYMax meet" className={compact ? "absolute bottom-0 left-0 h-[85%] -translate-x-1/4" : "absolute bottom-0 left-0 h-full -translate-x-[12%]"} data-depth="-0.08">
+      <svg viewBox="0 0 260 300" preserveAspectRatio="xMinYMax meet" className={compact ? "absolute bottom-0 left-0 h-[85%] -translate-x-1/4" : "absolute bottom-0 left-0 h-full -translate-x-[12%]"}>
         <g fill="#1b0833">
           {palm(70, 300, 250, 34)}
           {palm(170, 300, 180, 46)}
         </g>
       </svg>
-      <svg viewBox="0 0 260 300" preserveAspectRatio="xMaxYMax meet" className={compact ? "absolute right-0 bottom-0 h-[85%] translate-x-1/4" : "absolute right-0 bottom-0 h-full translate-x-[12%]"} data-depth="-0.08">
+      <svg viewBox="0 0 260 300" preserveAspectRatio="xMaxYMax meet" className={compact ? "absolute right-0 bottom-0 h-[85%] translate-x-1/4" : "absolute right-0 bottom-0 h-full translate-x-[12%]"}>
         <g fill="#1b0833" transform="translate(260 0) scale(-1 1)">
           {palm(70, 300, 260, 34)}
           {palm(170, 300, 165, 40)}
