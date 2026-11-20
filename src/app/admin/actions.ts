@@ -77,6 +77,45 @@ export async function setDisqualified(id: string, value: boolean) {
   revalidatePath("/admin", "layout");
 }
 
+// ---------- borrar ----------
+async function removeFiles(paths: (string | null)[]) {
+  const list = paths.filter((p): p is string => !!p);
+  for (let i = 0; i < list.length; i += 100) await db().storage.from(BUCKET).remove(list.slice(i, i + 100));
+}
+
+/** Borra una foto o video (y su archivo). Resta sus puntos. No se puede deshacer. */
+export async function deleteCheckin(id: string) {
+  await requireAdmin();
+  const sb = db();
+  const { data } = await sb.from("checkins").select("photo_path,thumb_path").eq("id", uuid.parse(id)).maybeSingle();
+  if (!data) return;
+  await sb.from("checkins").delete().eq("id", id);
+  await removeFiles([data.photo_path, data.thumb_path]);
+  revalidatePath("/admin", "layout");
+  revalidatePath("/");
+  revalidatePath("/galeria");
+}
+
+/**
+ * Borra a un participante para siempre: sus datos, fotos, videos y enlaces de Instagram.
+ * Si ya salió en un sorteo no se borra (el historial debe quedar completo): en ese caso, anúlalo.
+ */
+export async function deleteParticipant(id: string): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = db();
+  const pid = uuid.parse(id);
+  const { count } = await sb.from("draws").select("id", { count: "exact", head: true }).eq("participant_id", pid);
+  if (count) return { ok: false, error: "Esta persona aparece en el historial de sorteos. No se puede borrar; puedes anularla." };
+  const { data: files } = await sb.from("checkins").select("photo_path,thumb_path").eq("participant_id", pid);
+  const { error } = await sb.from("participants").delete().eq("id", pid); // borra en cascada registros y publicaciones
+  if (error) return { ok: false, error: "No se pudo borrar. Intenta de nuevo." };
+  await removeFiles((files ?? []).flatMap((f) => [f.photo_path, f.thumb_path]));
+  revalidatePath("/admin", "layout");
+  revalidatePath("/");
+  revalidatePath("/galeria");
+  return { ok: true };
+}
+
 // ---------- sorteo ----------
 export type WinnerMedia = { id: string; store: string; day: string; kind: "foto" | "video"; url: string; status: string };
 export type DrawResult =

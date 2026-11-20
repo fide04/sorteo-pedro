@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Camera, Gift, LayoutDashboard, Printer, Store } from "lucide-react";
+import { BarChart3, Camera, Gift, LayoutDashboard, Printer, Store } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/admin", label: "Ranking", icon: LayoutDashboard },
+  { href: "/admin/estadisticas", label: "Estadísticas", icon: BarChart3 },
   { href: "/admin/registros", label: "Fotos y videos", icon: Camera },
   { href: "/admin/instagram", label: "Instagram", icon: Instagram },
   { href: "/admin/sorteo", label: "Sorteo", icon: Gift },

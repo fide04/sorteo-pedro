@@ -83,7 +83,9 @@ export default async function Ranking({ searchParams }: { searchParams: Promise<
                 <TableRow key={p.id} className={p.disqualified ? "opacity-50" : ""}>
                   <TableCell className="text-muted-foreground pl-5 tabular-nums">{needle ? "" : i + 1}</TableCell>
                   <TableCell>
-                    <div className="font-semibold">{p.full_name}</div>
+                    <Link href={`/admin/participante/${p.id}`} className="font-semibold hover:underline">
+                      {p.full_name}
+                    </Link>
                     {p.instagram && (
                       <a className="text-secondary text-xs" href={`https://instagram.com/${p.instagram}`} target="_blank" rel="noreferrer">
                         @{p.instagram}

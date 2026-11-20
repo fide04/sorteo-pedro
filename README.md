@@ -53,6 +53,13 @@ Identidad estilo Vice City: morado noche, rosa neón #FF2E88, naranja y amarillo
 - El panel no aparece en Google ni puede incrustarse en otras páginas.
 - (Si no defines `ADMIN_ACCOUNTS`, funciona `ADMIN_PASSWORD` con el usuario `admin`.)
 
+## Panel: estadísticas y gestión
+
+- **Estadísticas:** tiendas con más registros, registros por día, horas pico, cuántas tiendas visitó cada persona y detalle por tienda (personas, fotos, videos, hoy, último registro).
+- **Fotos y videos:** filtros por tienda y por tipo (foto/video).
+- **Ficha de cada persona** (toca su nombre): desglose de puntos, tiendas visitadas, todas sus fotos/videos e Instagram.
+- **Borrar:** fotos o videos sueltos, o a un participante completo (con sus archivos). Para borrar a alguien hay que escribir su cédula. Quien ya salió en un sorteo no se puede borrar (se anula), para que el historial quede completo.
+
 ## Otras protecciones
 
 - Máximo 8 intentos fallidos de cédula + teléfono por conexión cada 15 minutos (frena a quien intente adivinar cédulas).
