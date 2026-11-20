@@ -176,10 +176,10 @@ on conflict (id) do update
 
 -- ---------- Tiendas iniciales (edita o borra a gusto) ----------
 insert into stores (slug, name, city) values
-  ('unicentro',  'CC Unicentro',         null),
+  ('unicentro',  'CC Unicentro',         'Maracay'),
   ('aviadores',  'CC Los Aviadores',     'Maracay'),
-  ('galeria',    'CC Galería Plaza',     null),
-  ('estacion',   'CC Estación Central',  null),
-  ('bazar',      'CC Gran Bazar',        null),
+  ('galeria',    'CC Galería Plaza',     'Maracay'),
+  ('estacion',   'CC Estación Central',  'Maracay'),
+  ('bazar',      'CC Gran Bazar',        'Maracay'),
   ('freemarket', 'CC Free Market',       'Valencia')
 on conflict (slug) do nothing;
