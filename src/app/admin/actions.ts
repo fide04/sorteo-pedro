@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { allRanked, getClosesAt } from "@/lib/data";
 import { formatDate, localDay, raffleClosed } from "@/lib/config";
-import { checkLogin, currentAdmin, endSession, requireAdmin, startSession } from "@/lib/session";
+import { adminAccounts, checkLogin, currentAdmin, endSession, requireAdmin, startSession } from "@/lib/session";
 import { BUCKET, db } from "@/lib/supabase";
 import type { ReviewStatus } from "@/lib/types";
 
@@ -27,6 +27,8 @@ export async function login(_: unknown, fd: FormData) {
   const { count } = await sb.from("failed_attempts").select("id", { count: "exact", head: true }).eq("ip", ip).gte("created_at", since);
   if ((count ?? 0) >= 5) return { error: "Demasiados intentos. Espera 15 minutos." };
   await new Promise((r) => setTimeout(r, 600)); // frena ataques de fuerza bruta
+  if (!adminAccounts().length)
+    return { error: "El panel no tiene cuentas configuradas. Revisa ADMIN_ACCOUNTS en Vercel y vuelve a publicar (Redeploy)." };
   const who = checkLogin(user, pw);
   if (!who) {
     await sb.from("failed_attempts").insert({ ip });

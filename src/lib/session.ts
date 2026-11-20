@@ -11,10 +11,14 @@ const enc = (u: string) => Buffer.from(u).toString("base64url");
 const dec = (u: string) => Buffer.from(u, "base64url").toString();
 const MAX_AGE = 60 * 60 * 12; // 12 h
 
+// Secreto para firmar sesiones. Si SESSION_SECRET falta o es corto, se deriva de la clave
+// secreta de Supabase (que solo existe en el servidor), para que la web nunca se caiga por eso.
 function secret() {
   const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 16) throw new Error("SESSION_SECRET debe tener al menos 16 caracteres");
-  return s;
+  if (s && s.length >= 16) return s;
+  const fallback = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!fallback) throw new Error("Falta SESSION_SECRET (o SUPABASE_SERVICE_ROLE_KEY) en las variables de Vercel");
+  return createHmac("sha256", "sorteo-session-v1").update(fallback).digest("base64url");
 }
 const sign = (v: string) => createHmac("sha256", secret()).update(v).digest("base64url");
 
