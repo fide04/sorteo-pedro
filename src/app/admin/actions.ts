@@ -220,6 +220,14 @@ export async function runDraw(excludePrevious: boolean): Promise<DrawResult> {
   };
 }
 
+// ---------- interruptor de los QR ----------
+export async function setQrMode(mode: "auto" | "open" | "paused") {
+  await requireAdmin();
+  const m = z.enum(["auto", "open", "paused"]).parse(mode);
+  await db().from("settings").upsert({ key: "qr_mode", value: m, updated_at: new Date().toISOString() });
+  revalidatePath("/", "layout");
+}
+
 // ---------- fechas y video del concurso ----------
 export async function setRaffleSettings(_: unknown, fd: FormData) {
   await requireAdmin();

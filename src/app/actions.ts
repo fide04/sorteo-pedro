@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db, BUCKET } from "@/lib/supabase";
-import { formatDate, localDay, RAFFLE, raffleClosed, raffleNotStarted } from "@/lib/config";
+import { formatDate, localDay, RAFFLE, registrationState } from "@/lib/config";
 import { firstName, getPassport, getRaffleDates, storeByToken } from "@/lib/data";
 import { clearParticipant, getParticipantId, setParticipant } from "@/lib/session";
 import { cedulaSchema, newParticipantSchema, parseInstagramUrl, phoneSchema } from "@/lib/validation";
@@ -115,8 +115,10 @@ export async function startCheckin(fd: FormData): Promise<
   { ok: true; upload: { url: string; path: string }; thumb: { url: string; path: string } | null } | Fail
 > {
   const dates = await getRaffleDates();
-  if (raffleNotStarted(dates.startsAt)) return fail(`El sorteo empieza el ${formatDate(dates.startsAt)}. ¡Te esperamos!`);
-  if (raffleClosed(dates.closesAt)) return fail("El sorteo ya cerró. ¡Gracias por participar!");
+  const state = registrationState(dates);
+  if (state === "antes") return fail(`El sorteo empieza el ${formatDate(dates.startsAt)}. ¡Te esperamos!`);
+  if (state === "cerrado") return fail("El sorteo ya cerró. ¡Gracias por participar!");
+  if (state === "pausado") return fail("El registro está pausado por un momento. Intenta de nuevo más tarde.");
   const store = await storeByToken(String(fd.get("token") ?? ""));
   if (!store) return fail("Este código QR no es válido. Escanea el cartel de la tienda otra vez.");
 
@@ -157,7 +159,7 @@ export async function finishCheckin(input: { token: string; path: string; thumbP
   if (!pid) return fail("Tu sesión expiró. Vuelve a escanear el QR.");
   {
     const d = await getRaffleDates();
-    if (raffleNotStarted(d.startsAt) || raffleClosed(d.closesAt)) return fail("El sorteo no está abierto en este momento.");
+    if (registrationState(d) !== "abierto") return fail("El registro no está abierto en este momento.");
   }
   const store = await storeByToken(input.token);
   if (!store) return fail("Este código QR no es válido.");

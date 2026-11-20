@@ -5,6 +5,9 @@ import { Live } from "@/components/fx/live";
 import { Button } from "@/components/ui/button";
 import { RAFFLE } from "@/lib/config";
 import { currentAdmin, requireAdmin } from "@/lib/session";
+import { getRaffleDates } from "@/lib/data";
+import { registrationState } from "@/lib/config";
+import Link from "next/link";
 import { db } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +16,13 @@ export const metadata = { title: "Panel | Sorteo TechnoCell", robots: { index: f
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   await requireAdmin();
   const who = await currentAdmin();
+  const qr = registrationState(await getRaffleDates());
+  const qrBadge = {
+    abierto: { t: "QR abiertos", c: "bg-success/20 text-success" },
+    pausado: { t: "QR pausados", c: "bg-destructive/20 text-destructive" },
+    antes: { t: "QR: aún no empieza", c: "bg-warning/20 text-warning" },
+    cerrado: { t: "QR: sorteo cerrado", c: "bg-muted text-muted-foreground" },
+  }[qr];
   const [{ count }, { count: videos }] = await Promise.all([
     db().from("social_claims").select("id", { count: "exact", head: true }).eq("status", "pendiente"),
     db().from("checkins").select("id", { count: "exact", head: true }).eq("status", "pendiente"),
@@ -28,6 +38,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           </h1>
         </div>
         <form action={logout} className="flex items-center gap-3">
+          <Link href="/admin/sorteo" className={`rounded-full px-2.5 py-1 text-xs font-bold ${qrBadge.c}`}>
+            {qrBadge.t}
+          </Link>
           <Live seconds={15} className="text-muted-foreground" />
           <span className="text-muted-foreground text-sm">
             Sesión: <b className="text-foreground">{who}</b>

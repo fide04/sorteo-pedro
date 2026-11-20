@@ -36,7 +36,22 @@ export function raffleNotStarted(startsAt: string, now = new Date()) {
   return localDay(now) < startsAt;
 }
 
-export type RaffleDates = { startsAt: string; closesAt: string; announceAt: string; contestUrl: string | null };
+export type QrMode = "auto" | "open" | "paused";
+export type RaffleDates = { startsAt: string; closesAt: string; announceAt: string; contestUrl: string | null; qrMode: QrMode };
+
+/**
+ * Estado efectivo del registro por QR:
+ *  - "auto": según fechas (antes / abierto / cerrado)
+ *  - "open": abierto ya, sin importar las fechas (pruebas o apertura anticipada)
+ *  - "paused": nadie puede registrarse
+ */
+export function registrationState(d: RaffleDates): "abierto" | "antes" | "cerrado" | "pausado" {
+  if (d.qrMode === "paused") return "pausado";
+  if (d.qrMode === "open") return "abierto";
+  if (raffleNotStarted(d.startsAt)) return "antes";
+  if (raffleClosed(d.closesAt)) return "cerrado";
+  return "abierto";
+}
 
 /** Días que faltan para una fecha (0 = hoy). */
 export function daysUntil(day: string) {

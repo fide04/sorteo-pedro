@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClosingForm } from "@/components/admin/closing-form";
 import { allRanked, getRaffleDates } from "@/lib/data";
-import { daysUntil, formatDate, raffleClosed, raffleNotStarted, TZ } from "@/lib/config";
+import { daysUntil, formatDate, raffleClosed, raffleNotStarted, registrationState, TZ } from "@/lib/config";
+import { QrSwitch } from "@/components/admin/qr-switch";
 import { db } from "@/lib/supabase";
 
 type Draw = { id: string; status: string; note: string | null; created_at: string; winner_points: number; total_points: number; total_participants: number; participants: { full_name: string; cedula: string } | null };
@@ -18,6 +19,17 @@ export default async function Sorteo() {
   const closed = raffleClosed(closesAt);
   const notStarted = raffleNotStarted(startsAt);
   const daysLeft = daysUntil(closesAt) + 1;
+  const state = registrationState(dates);
+  const qrStatus =
+    state === "abierto"
+      ? dates.qrMode === "open"
+        ? "Ahora mismo: el registro está ABIERTO (abierto a mano, sin importar las fechas)."
+        : "Ahora mismo: el registro está ABIERTO."
+      : state === "pausado"
+        ? "Ahora mismo: el registro está PAUSADO. Los QR muestran «pausado por un momento»."
+        : state === "antes"
+          ? `Ahora mismo: CERRADO hasta el ${formatDate(startsAt)} (todavía no empieza).`
+          : "Ahora mismo: CERRADO (ya pasó la fecha de cierre).";
   const { data } = await db()
     .from("draws")
     .select("id,status,note,created_at,winner_points,total_points,total_participants,participants(full_name,cedula)")
@@ -27,6 +39,15 @@ export default async function Sorteo() {
 
   return (
     <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Registro por QR</CardTitle>
+          <CardDescription>Activa o pausa los QR de todas las tiendas sin cambiar las fechas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <QrSwitch mode={dates.qrMode} status={qrStatus} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Fechas y video del concurso</CardTitle>

@@ -8,13 +8,14 @@ const isDay = (v?: string | null) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /** Fechas y video del concurso: lo guardado en el panel, o los valores de config.ts. */
 export async function getRaffleDates(): Promise<RaffleDates> {
-  const { data } = await db().from("settings").select("key,value").in("key", ["starts_at", "closes_at", "announce_at", "contest_post_url"]);
+  const { data } = await db().from("settings").select("key,value").in("key", ["starts_at", "closes_at", "announce_at", "contest_post_url", "qr_mode"]);
   const v = new Map((data ?? []).map((r) => [r.key, r.value as string]));
   return {
     startsAt: isDay(v.get("starts_at")) ? v.get("starts_at")! : RAFFLE.startsAt,
     closesAt: isDay(v.get("closes_at")) ? v.get("closes_at")! : RAFFLE.closesAt,
     announceAt: isDay(v.get("announce_at")) ? v.get("announce_at")! : RAFFLE.announceAt,
     contestUrl: v.get("contest_post_url") || null,
+    qrMode: (["open", "paused"].includes(v.get("qr_mode") ?? "") ? v.get("qr_mode") : "auto") as RaffleDates["qrMode"],
   };
 }
 

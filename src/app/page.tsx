@@ -8,7 +8,7 @@ import { GalleryGrid, RankingList } from "@/components/gallery";
 import { Live } from "@/components/fx/live";
 import { ContestVideo } from "@/components/contest-video";
 import { activeStores, getRaffleDates, publicGallery, publicRanking, publicWinner } from "@/lib/data";
-import { daysUntil, formatDate, RAFFLE, raffleClosed, raffleNotStarted } from "@/lib/config";
+import { daysUntil, formatDate, RAFFLE, registrationState } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +29,9 @@ export default async function Home() {
     publicWinner(),
   ]);
   const { closesAt, startsAt, announceAt, contestUrl } = dates;
-  const closed = raffleClosed(closesAt);
-  const notStarted = raffleNotStarted(startsAt);
+  const state = registrationState(dates);
+  const closed = state === "cerrado";
+  const notStarted = state === "antes";
   const toStart = daysUntil(startsAt);
   const daysLeft = daysUntil(closesAt) + 1;
   const countdown = closed
