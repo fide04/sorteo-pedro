@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
 import { logout } from "../actions";
 import { AdminNav } from "@/components/admin/nav";
+import { Live } from "@/components/fx/live";
 import { Button } from "@/components/ui/button";
 import { RAFFLE } from "@/lib/config";
 import { currentAdmin, requireAdmin } from "@/lib/session";
@@ -27,6 +28,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           </h1>
         </div>
         <form action={logout} className="flex items-center gap-3">
+          <Live seconds={15} className="text-muted-foreground" />
           <span className="text-muted-foreground text-sm">
             Sesión: <b className="text-foreground">{who}</b>
           </span>

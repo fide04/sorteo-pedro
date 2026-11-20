@@ -1,4 +1,5 @@
 import { LookupForm } from "@/components/lookup-form";
+import { Live } from "@/components/fx/live";
 import { SiteShell } from "@/components/site-shell";
 import { getPassport } from "@/lib/data";
 import { getParticipantId } from "@/lib/session";
@@ -19,6 +20,7 @@ export default async function MisPuntos() {
     >
       <div className="mx-auto -mt-10 max-w-md">
         <LookupForm initial={passport} />
+        {passport && <Live seconds={45} label={false} />}
       </div>
     </SiteShell>
   );

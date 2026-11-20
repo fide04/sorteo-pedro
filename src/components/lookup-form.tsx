@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { forgetMe, lookup } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,10 @@ import type { Passport } from "@/lib/types";
 
 export function LookupForm({ initial }: { initial: Passport | null }) {
   const [passport, setPassport] = useState(initial);
+  // al actualizarse en vivo (puntos aprobados), tomamos los datos nuevos del servidor
+  useEffect(() => {
+    if (initial) setPassport(initial);
+  }, [initial]);
   const [cedula, setCedula] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");

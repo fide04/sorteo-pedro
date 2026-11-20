@@ -1,4 +1,5 @@
 import { GalleryGrid, RankingList } from "@/components/gallery";
+import { Live } from "@/components/fx/live";
 import { SiteShell } from "@/components/site-shell";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export default async function Galeria({ searchParams }: { searchParams: Promise<
         <div className="mx-auto max-w-5xl px-5 pt-4 pb-4">
           <h1 className="font-wide text-[34px] leading-[0.95] font-extrabold tracking-tight sm:text-5xl">Galería</h1>
           <p className="mt-2 text-white/85">Las fotos de todos los que están participando.</p>
+          {page === 1 && <Live seconds={30} className="mt-2 text-white/80" />}
         </div>
       }
     >

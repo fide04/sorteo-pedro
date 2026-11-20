@@ -5,6 +5,7 @@ import { Tilt } from "@/components/fx/tilt";
 import { WantedStars } from "@/components/vice";
 import { Button } from "@/components/ui/button";
 import { GalleryGrid, RankingList } from "@/components/gallery";
+import { Live } from "@/components/fx/live";
 import { activeStores, getClosesAt, publicGallery, publicRanking, publicWinner } from "@/lib/data";
 import { formatDate, localDay, RAFFLE, raffleClosed } from "@/lib/config";
 
@@ -13,7 +14,10 @@ export const dynamic = "force-dynamic";
 const steps = [
   { title: "Busca el cartel", text: "Está en la entrada o junto a la caja de cada tienda TechnoCell." },
   { title: "Escanea el código QR", text: "Con la cámara de tu teléfono. No tienes que instalar nada." },
-  { title: "Sube una foto o un video", text: "Que sea creativo: sale en la galería. Foto suma 2 puntos y video 4." },
+  {
+    title: "Sube una foto o un video",
+    text: `Que sea creativo: sale en la galería. Foto suma ${RAFFLE.points.photo} puntos y video ${RAFFLE.points.video}.`,
+  },
 ];
 
 export default async function Home() {
@@ -156,9 +160,12 @@ export default async function Home() {
           </div>
         </section>
         <section aria-labelledby="tabla">
-          <h2 id="tabla" className="font-wide text-2xl font-extrabold tracking-tight">
-            Tabla de puntos
-          </h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="tabla" className="font-wide text-2xl font-extrabold tracking-tight">
+              Tabla de puntos
+            </h2>
+            <Live seconds={30} className="text-muted-foreground" />
+          </div>
           <div className="mt-6">
             <RankingList rows={ranking} />
           </div>
