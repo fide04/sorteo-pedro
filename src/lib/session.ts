@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { redirect } from "next/navigation";
 
-const COOKIE = "tc_admin";
+// Nombre nuevo: la versión anterior usaba "tc_admin" con otro formato y ruta "/", y esa cookie
+// vieja tapaba a la nueva (el navegador manda las dos y el servidor leía la vieja).
+const COOKIE = "tc_admin_s";
+const LEGACY_COOKIE = "tc_admin";
+const enc = (u: string) => Buffer.from(u).toString("base64url");
+const dec = (u: string) => Buffer.from(u, "base64url").toString();
 const MAX_AGE = 60 * 60 * 12; // 12 h
 
 function secret() {
@@ -62,21 +67,26 @@ function adminSign(user: string, exp: string) {
 
 export async function startSession(user: string) {
   const exp = String(Date.now() + MAX_AGE * 1000);
-  (await cookies()).set(COOKIE, `${user}.${exp}.${adminSign(user, exp)}`, {
+  const jar = await cookies();
+  jar.delete({ name: LEGACY_COOKIE, path: "/" });
+  jar.set(COOKIE, `${enc(user)}.${exp}.${adminSign(user, exp)}`, {
     httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/admin", maxAge: MAX_AGE,
   });
 }
 
 export async function endSession() {
-  (await cookies()).delete({ name: COOKIE, path: "/admin" });
+  const jar = await cookies();
+  jar.delete({ name: COOKIE, path: "/admin" });
+  jar.delete({ name: LEGACY_COOKIE, path: "/" });
 }
 
 /** Usuario del panel con sesión válida, o null. */
 export async function currentAdmin(): Promise<string | null> {
   const v = (await cookies()).get(COOKIE)?.value;
   if (!v) return null;
-  const [user, exp, sig] = v.split(".");
-  if (!user || !exp || !sig || Number(exp) <= Date.now()) return null;
+  const [u, exp, sig] = v.split(".");
+  if (!u || !exp || !sig || Number(exp) <= Date.now()) return null;
+  const user = dec(u);
   const expected = adminSign(user, exp);
   return expected && safeEqual(sig, expected) ? user : null;
 }
