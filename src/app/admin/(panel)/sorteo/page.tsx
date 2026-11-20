@@ -9,7 +9,7 @@ import { allRanked, getClosesAt } from "@/lib/data";
 import { formatDate, localDay, raffleClosed, TZ } from "@/lib/config";
 import { db } from "@/lib/supabase";
 
-type Draw = { id: string; status: string; created_at: string; winner_points: number; total_points: number; total_participants: number; participants: { full_name: string; cedula: string } | null };
+type Draw = { id: string; status: string; note: string | null; created_at: string; winner_points: number; total_points: number; total_participants: number; participants: { full_name: string; cedula: string } | null };
 
 export default async function Sorteo() {
   const [ranked, closesAt] = await Promise.all([allRanked(), getClosesAt()]);
@@ -18,7 +18,7 @@ export default async function Sorteo() {
   const daysLeft = Math.round((Date.parse(closesAt) - Date.parse(localDay())) / 86400000) + 1;
   const { data } = await db()
     .from("draws")
-    .select("id,status,created_at,winner_points,total_points,total_participants,participants(full_name,cedula)")
+    .select("id,status,note,created_at,winner_points,total_points,total_participants,participants(full_name,cedula)")
     .order("created_at", { ascending: false })
     .returns<Draw[]>();
   const fmt = new Intl.DateTimeFormat("es-VE", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" });
@@ -59,7 +59,10 @@ export default async function Sorteo() {
             <TableBody>
               {(data ?? []).map((d) => (
                 <TableRow key={d.id}>
-                  <TableCell className="pl-5">{fmt.format(new Date(d.created_at))}</TableCell>
+                  <TableCell className="pl-5">
+                    {fmt.format(new Date(d.created_at))}
+                    {d.note && <div className="text-muted-foreground text-xs">{d.note}</div>}
+                  </TableCell>
                   <TableCell className="font-semibold">{d.participants?.full_name}</TableCell>
                   <TableCell className="tabular-nums">{d.participants?.cedula}</TableCell>
                   <TableCell className="text-right tabular-nums">{d.winner_points}</TableCell>

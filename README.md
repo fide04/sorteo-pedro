@@ -44,6 +44,15 @@ Identidad estilo Vice City: morado noche, rosa neón #FF2E88, naranja y amarillo
 - El botón **Sortear ganador** solo se habilita cuando el sorteo cerró. Si necesitas sortear antes, adelanta la fecha.
 - Al **confirmar** un ganador, la portada lo anuncia (nombre corto, p. ej. "Ana P.").
 
+## Acceso al panel (/admin)
+
+- Solo **2 cuentas**. Se definen en Vercel con la variable `ADMIN_ACCOUNTS`, en formato `usuario:clave;usuario2:clave2` (claves de 12 caracteres o más).
+- Login con usuario y clave; 5 intentos fallidos bloquean esa conexión 15 minutos.
+- El panel muestra quién está conectado y el historial del sorteo guarda quién sorteó, confirmó o anuló.
+- Cambiar la clave de alguien cierra sus sesiones abiertas. La sesión dura 12 horas.
+- El panel no aparece en Google ni puede incrustarse en otras páginas.
+- (Si no defines `ADMIN_ACCOUNTS`, funciona `ADMIN_PASSWORD` con el usuario `admin`.)
+
 ## Otras protecciones
 
 - Máximo 8 intentos fallidos de cédula + teléfono por conexión cada 15 minutos (frena a quien intente adivinar cédulas).

@@ -18,27 +18,71 @@ function safeEqual(a: string, b: string) {
   return A.length === B.length && timingSafeEqual(A, B);
 }
 
-export function checkPassword(pw: string) {
-  const real = process.env.ADMIN_PASSWORD;
-  return !!real && safeEqual(sign(pw), sign(real));
+// ---------- Cuentas del panel ----------
+// ADMIN_ACCOUNTS en Vercel, máximo 2 personas, una por línea o separadas por ";":
+//   pedro:una-clave-larga;maria:otra-clave-larga
+// (Compatibilidad: si no existe, se usa ADMIN_PASSWORD con el usuario "admin".)
+const MAX_ADMINS = 2;
+
+export function adminAccounts(): { user: string; pass: string }[] {
+  const raw = process.env.ADMIN_ACCOUNTS?.trim();
+  const list = raw
+    ? raw
+        .split(/[;\n]+/)
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .map((e) => {
+          const k = e.indexOf(":");
+          return { user: e.slice(0, k).trim().toLowerCase(), pass: e.slice(k + 1).trim() };
+        })
+        .filter((a) => /^[a-z0-9._-]{2,30}$/.test(a.user) && a.pass.length >= 8)
+    : process.env.ADMIN_PASSWORD
+      ? [{ user: "admin", pass: process.env.ADMIN_PASSWORD }]
+      : [];
+  return list.slice(0, MAX_ADMINS);
 }
 
-export async function startSession() {
+/** Devuelve el usuario si la combinación es correcta. Compara siempre todas las cuentas (sin atajos de tiempo). */
+export function checkLogin(user: string, pass: string): string | null {
+  const u = user.trim().toLowerCase();
+  let found: string | null = null;
+  for (const a of adminAccounts()) {
+    const okUser = safeEqual(sign("u:" + u), sign("u:" + a.user));
+    const okPass = safeEqual(sign("p:" + pass), sign("p:" + a.pass));
+    if (okUser && okPass) found = a.user;
+  }
+  return found;
+}
+
+// La firma incluye la clave de esa persona: si cambias su clave, sus sesiones abiertas caducan.
+function adminSign(user: string, exp: string) {
+  const acc = adminAccounts().find((a) => a.user === user);
+  return acc ? sign(`admin:${user}:${exp}:${acc.pass}`) : null;
+}
+
+export async function startSession(user: string) {
   const exp = String(Date.now() + MAX_AGE * 1000);
-  (await cookies()).set(COOKIE, `${exp}.${sign(exp)}`, {
-    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: MAX_AGE,
+  (await cookies()).set(COOKIE, `${user}.${exp}.${adminSign(user, exp)}`, {
+    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/admin", maxAge: MAX_AGE,
   });
 }
 
 export async function endSession() {
-  (await cookies()).delete(COOKIE);
+  (await cookies()).delete({ name: COOKIE, path: "/admin" });
+}
+
+/** Usuario del panel con sesión válida, o null. */
+export async function currentAdmin(): Promise<string | null> {
+  const v = (await cookies()).get(COOKIE)?.value;
+  if (!v) return null;
+  const [user, exp, sig] = v.split(".");
+  if (!user || !exp || !sig || Number(exp) <= Date.now()) return null;
+  const expected = adminSign(user, exp);
+  return expected && safeEqual(sig, expected) ? user : null;
 }
 
 export async function isAdmin() {
-  const v = (await cookies()).get(COOKIE)?.value;
-  if (!v) return false;
-  const [exp, sig] = v.split(".");
-  return !!exp && !!sig && safeEqual(sig, sign(exp)) && Number(exp) > Date.now();
+  return (await currentAdmin()) !== null;
 }
 
 /** Úsalo al inicio de cada página o acción del panel. */

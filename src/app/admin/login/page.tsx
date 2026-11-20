@@ -16,13 +16,17 @@ export default function Login() {
         <CardHeader>
           <Lock className="text-secondary size-8" />
           <CardTitle>Panel del sorteo</CardTitle>
-          <CardDescription>Solo para el equipo de TechnoCell.</CardDescription>
+          <CardDescription>Acceso solo para las 2 cuentas autorizadas de TechnoCell.</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="user">Usuario</Label>
+              <Input id="user" name="user" autoComplete="username" autoCapitalize="none" required autoFocus />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="pw">Clave</Label>
-              <Input id="pw" name="password" type="password" autoComplete="current-password" required autoFocus />
+              <Input id="pw" name="password" type="password" autoComplete="current-password" required />
             </div>
             <Button className="w-full" size="lg" disabled={pending}>
               {pending && <Loader2 className="animate-spin" />} Entrar

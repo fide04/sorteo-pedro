@@ -156,6 +156,13 @@ alter table social_claims enable row level security;
 alter table draws         enable row level security;
 alter table settings      enable row level security;
 alter table failed_attempts enable row level security;
+-- El servidor (service_role) necesita permisos explícitos (los proyectos nuevos de Supabase no los dan solos).
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public grant usage, select on sequences to service_role;
+
 -- Quitamos permisos a anon/authenticated: el navegador no toca la base, todo pasa por el servidor.
 revoke all on stores, participants, checkins, social_claims, draws, settings, failed_attempts, participant_points from anon, authenticated;
 

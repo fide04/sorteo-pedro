@@ -2,20 +2,38 @@
 
 import { randomBytes, randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { allRanked, getClosesAt } from "@/lib/data";
 import { formatDate, localDay, raffleClosed } from "@/lib/config";
-import { checkPassword, endSession, requireAdmin, startSession } from "@/lib/session";
+import { checkLogin, currentAdmin, endSession, requireAdmin, startSession } from "@/lib/session";
 import { BUCKET, db } from "@/lib/supabase";
 import type { ReviewStatus } from "@/lib/types";
 
 // ---------- sesión ----------
+// Máximo 5 claves equivocadas por conexión cada 15 minutos.
+async function adminIp() {
+  const h = await headers();
+  return "admin:" + (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "local").trim().slice(0, 64);
+}
+
 export async function login(_: unknown, fd: FormData) {
   const pw = String(fd.get("password") ?? "");
-  await new Promise((r) => setTimeout(r, 400)); // frena ataques de fuerza bruta
-  if (!checkPassword(pw)) return { error: "Clave incorrecta" };
-  await startSession();
+  const user = String(fd.get("user") ?? "");
+  const ip = await adminIp();
+  const sb = db();
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { count } = await sb.from("failed_attempts").select("id", { count: "exact", head: true }).eq("ip", ip).gte("created_at", since);
+  if ((count ?? 0) >= 5) return { error: "Demasiados intentos. Espera 15 minutos." };
+  await new Promise((r) => setTimeout(r, 600)); // frena ataques de fuerza bruta
+  const who = checkLogin(user, pw);
+  if (!who) {
+    await sb.from("failed_attempts").insert({ ip });
+    const left = 4 - (count ?? 0);
+    return { error: left > 0 ? `Usuario o clave incorrectos. Te quedan ${left} intentos.` : "Demasiados intentos. Espera 15 minutos." };
+  }
+  await startSession(who);
   redirect("/admin");
 }
 
@@ -92,7 +110,11 @@ async function participantMedia(participantId: string): Promise<WinnerMedia[]> {
 
 export async function confirmDraw(drawId: string) {
   await requireAdmin();
-  await db().from("draws").update({ status: "confirmado" }).eq("id", uuid.parse(drawId));
+  const { data: d } = await db().from("draws").select("note").eq("id", uuid.parse(drawId)).single();
+  await db()
+    .from("draws")
+    .update({ status: "confirmado", note: `${d?.note ?? ""} · confirmado por ${await currentAdmin()}`.replace(/^ · /, "") })
+    .eq("id", uuid.parse(drawId));
   revalidatePath("/admin", "layout");
 }
 
@@ -100,7 +122,13 @@ export async function confirmDraw(drawId: string) {
 export async function voidDraw(drawId: string) {
   await requireAdmin();
   const sb = db();
-  const { data } = await sb.from("draws").update({ status: "anulado" }).eq("id", uuid.parse(drawId)).select("participant_id").single();
+  const { data: d } = await sb.from("draws").select("note").eq("id", uuid.parse(drawId)).single();
+  const { data } = await sb
+    .from("draws")
+    .update({ status: "anulado", note: `${d?.note ?? ""} · anulado por ${await currentAdmin()}`.replace(/^ · /, "") })
+    .eq("id", uuid.parse(drawId))
+    .select("participant_id")
+    .single();
   if (data) await sb.from("participants").update({ disqualified: true }).eq("id", data.participant_id);
   revalidatePath("/admin", "layout");
   revalidatePath("/");
@@ -125,7 +153,13 @@ export async function runDraw(excludePrevious: boolean): Promise<DrawResult> {
   const winner = pool.find((p) => (ticket -= p.points) < 0)!;
   const { data: draw } = await sb
     .from("draws")
-    .insert({ participant_id: winner.id, winner_points: winner.points, total_points: total, total_participants: pool.length })
+    .insert({
+      participant_id: winner.id,
+      winner_points: winner.points,
+      total_points: total,
+      total_participants: pool.length,
+      note: `Sorteado por ${await currentAdmin()}`,
+    })
     .select("id")
     .single();
   revalidatePath("/admin", "layout");

@@ -3,7 +3,7 @@ import { logout } from "../actions";
 import { AdminNav } from "@/components/admin/nav";
 import { Button } from "@/components/ui/button";
 import { RAFFLE } from "@/lib/config";
-import { requireAdmin } from "@/lib/session";
+import { currentAdmin, requireAdmin } from "@/lib/session";
 import { db } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +11,7 @@ export const metadata = { title: "Panel | Sorteo TechnoCell", robots: { index: f
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   await requireAdmin();
+  const who = await currentAdmin();
   const [{ count }, { count: videos }] = await Promise.all([
     db().from("social_claims").select("id", { count: "exact", head: true }).eq("status", "pendiente"),
     db().from("checkins").select("id", { count: "exact", head: true }).eq("status", "pendiente"),
@@ -25,7 +26,10 @@ export default async function PanelLayout({ children }: { children: React.ReactN
             Sorteo {RAFFLE.prize}
           </h1>
         </div>
-        <form action={logout}>
+        <form action={logout} className="flex items-center gap-3">
+          <span className="text-muted-foreground text-sm">
+            Sesión: <b className="text-foreground">{who}</b>
+          </span>
           <Button variant="ghost" size="sm">
             <LogOut /> Salir
           </Button>
