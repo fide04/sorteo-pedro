@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Ban, Download, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, Ban, Download, RotateCcw, Search } from "lucide-react";
 import { setDisqualified } from "../actions";
 import { ActionButton } from "@/components/admin/action-button";
 import { Badge } from "@/components/ui/badge";
@@ -10,19 +10,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { allRanked } from "@/lib/data";
 import { localDay } from "@/lib/config";
 import { db } from "@/lib/supabase";
+import { fraudFlags } from "@/lib/fraud";
 
-export default async function Ranking({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q = "" } = await searchParams;
-  const [all, today] = await Promise.all([
+export default async function Ranking({ searchParams }: { searchParams: Promise<{ q?: string; alertas?: string }> }) {
+  const { q = "", alertas } = await searchParams;
+  const [all, today, flags] = await Promise.all([
     allRanked(),
     db().from("checkins").select("id", { count: "exact", head: true }).eq("day", localDay()),
+    fraudFlags(),
   ]);
   const valid = all.filter((p) => !p.disqualified);
   const totalPoints = valid.reduce((a, p) => a + p.points, 0);
   const completed = valid.filter((p) => p.stores_total > 0 && p.stores_visited >= p.stores_total).length;
 
   const needle = q.trim().toLowerCase();
-  const rows = (needle ? all.filter((p) => p.cedula.includes(needle) || p.full_name.toLowerCase().includes(needle) || p.phone.includes(needle)) : all).slice(0, 200);
+  const flagged = all.filter((p) => flags.has(p.id)).length;
+  const base = alertas ? all.filter((p) => flags.has(p.id)) : all;
+  const rows = (needle ? base.filter((p) => p.cedula.includes(needle) || p.full_name.toLowerCase().includes(needle) || p.phone.includes(needle)) : base).slice(0, 200);
 
   const stats = [
     { label: "Participantes", value: valid.length },
@@ -57,6 +61,11 @@ export default async function Ranking({ searchParams }: { searchParams: Promise<
                 <Search />
               </Button>
             </form>
+            <Button asChild size="sm" variant={alertas ? "default" : "outline"} className="h-9">
+              <Link href={alertas ? "/admin" : "/admin?alertas=1"}>
+                <AlertTriangle /> Alertas ({flagged})
+              </Link>
+            </Button>
             <Button asChild size="sm" variant="secondary" className="h-9">
               <a href="/admin/export">
                 <Download /> CSV
@@ -86,6 +95,11 @@ export default async function Ranking({ searchParams }: { searchParams: Promise<
                     <Link href={`/admin/participante/${p.id}`} className="font-semibold hover:underline">
                       {p.full_name}
                     </Link>
+                    {flags.has(p.id) && (
+                      <Link href={`/admin/participante/${p.id}`} title={flags.get(p.id)!.map((f) => f.text).join("\n")} className="text-warning ml-1.5 inline-flex align-middle">
+                        <AlertTriangle className="size-4" />
+                      </Link>
+                    )}
                     {p.instagram && (
                       <a className="text-secondary text-xs" href={`https://instagram.com/${p.instagram}`} target="_blank" rel="noreferrer">
                         @{p.instagram}

@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RAFFLE, TZ } from "@/lib/config";
 import { activeStores } from "@/lib/data";
 import { BUCKET, db } from "@/lib/supabase";
+import { fraudFlags } from "@/lib/fraud";
+import { FlagList } from "@/components/admin/flag-list";
 import type { ParticipantPoints, ReviewStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,7 @@ export default async function Participante({ params }: { params: Promise<{ id: s
     activeStores(),
     sb.from("draws").select("id,status,created_at,note").eq("participant_id", id),
   ]);
+  const myFlags = (await fraudFlags()).get(id) ?? [];
   if (!p) notFound();
   const rows = checks ?? [];
   const { data: signed } = rows.length ? await sb.storage.from(BUCKET).createSignedUrls(rows.map((r) => r.photo_path), 3600) : { data: [] };
@@ -53,6 +56,8 @@ export default async function Participante({ params }: { params: Promise<{ id: s
           <ArrowLeft /> Ranking
         </Link>
       </Button>
+
+      <FlagList flags={myFlags} />
 
       <Card>
         <CardHeader className="flex flex-wrap items-start justify-between gap-4">

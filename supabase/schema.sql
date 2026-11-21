@@ -166,6 +166,37 @@ alter default privileges in schema public grant usage, select on sequences to se
 -- Quitamos permisos a anon/authenticated: el navegador no toca la base, todo pasa por el servidor.
 revoke all on stores, participants, checkins, social_claims, draws, settings, failed_attempts, participant_points from anon, authenticated;
 
+-- ---------- Anti-trampa ----------
+-- Dispositivo (cookie anónima), huella de la imagen, hora en que se tomó la foto e IP
+alter table participants add column if not exists device_id text;
+alter table checkins add column if not exists device_id text;
+alter table checkins add column if not exists phash text;        -- huella visual (dHash 64 bits) para detectar fotos repetidas o copiadas
+alter table checkins add column if not exists taken_at timestamptz; -- hora del archivo según el teléfono
+alter table checkins add column if not exists ip text;
+create index if not exists checkins_device_idx on checkins (device_id);
+create index if not exists participants_device_idx on participants (device_id);
+-- Un teléfono = una cédula (el teléfono es como contactamos al ganador)
+create unique index if not exists participants_phone_key on participants (phone);
+
+-- Bitácora del equipo: quién hizo qué en el panel
+create table if not exists admin_log (
+  id         bigserial primary key,
+  admin      text not null,
+  action     text not null,
+  detail     text,
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_log_created_idx on admin_log (created_at desc);
+alter table admin_log enable row level security;
+grant select, insert on admin_log to service_role;
+grant usage, select on sequence admin_log_id_seq to service_role;
+revoke all on admin_log from anon, authenticated;
+
+-- Función interna de Supabase: que nadie de afuera pueda llamarla
+do $$ begin
+  revoke execute on function public.rls_auto_enable() from anon, authenticated, public;
+exception when undefined_function then null; end $$;
+
 -- ---------- Storage: bucket privado para las fotos ----------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('fotos', 'fotos', false, 62914560,

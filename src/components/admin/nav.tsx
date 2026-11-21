@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Camera, Gift, LayoutDashboard, Printer, Store } from "lucide-react";
+import { BarChart3, Camera, Gift, History, LayoutDashboard, Printer, Store } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ const items = [
   { href: "/admin/sorteo", label: "Sorteo", icon: Gift },
   { href: "/admin/tiendas", label: "Tiendas", icon: Store },
   { href: "/admin/carteles", label: "Carteles", icon: Printer },
+  { href: "/admin/actividad", label: "Actividad", icon: History },
 ];
 
 export function AdminNav({ badges }: { badges: Record<string, number> }) {

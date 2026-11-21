@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Ban, Check, Gift, Loader2, MessageCircle, PartyPopper } from "lucide-react";
+import { FlagList } from "@/components/admin/flag-list";
 import { confirmDraw, runDraw, voidDraw, type DrawResult } from "@/app/admin/actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,7 @@ export function DrawPanel({
                   </p>
                 </div>
               )}
+              <FlagList flags={win.flags} title="Ojo, el sistema detectó esto" />
               <div>
                 <p className="font-bold">{contestUrl ? "2. " : ""}Revisa que cumpla: {win.media.length} registros</p>
                 <p className="text-muted-foreground text-sm">

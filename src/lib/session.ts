@@ -124,3 +124,17 @@ export async function getParticipantId() {
 export async function clearParticipant() {
   (await cookies()).delete(PCOOKIE);
 }
+
+// ---------- Dispositivo (anónimo) ----------
+// Un identificador aleatorio por teléfono/navegador. Solo sirve para detectar varias cédulas
+// usadas desde el mismo equipo (alerta en el panel), no para identificar a nadie.
+const DCOOKIE = "tc_d";
+
+export async function deviceId(): Promise<string> {
+  const jar = await cookies();
+  const v = jar.get(DCOOKIE)?.value;
+  if (v && /^[A-Za-z0-9_-]{16,40}$/.test(v)) return v;
+  const id = (await import("node:crypto")).randomBytes(16).toString("base64url");
+  jar.set(DCOOKIE, id, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 400 });
+  return id;
+}

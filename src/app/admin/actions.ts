@@ -7,6 +7,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { allRanked, getClosesAt } from "@/lib/data";
 import { parseInstagramUrl } from "@/lib/validation";
+import { logAdmin } from "@/lib/audit";
+import { fraudFlags, type Flag } from "@/lib/fraud";
 import { formatDate, localDay, raffleClosed } from "@/lib/config";
 import { adminAccounts, checkLogin, currentAdmin, endSession, requireAdmin, startSession } from "@/lib/session";
 import { BUCKET, db } from "@/lib/supabase";
@@ -37,6 +39,7 @@ export async function login(_: unknown, fd: FormData) {
     return { error: left > 0 ? `Usuario o clave incorrectos. Te quedan ${left} intentos.` : "Demasiados intentos. Espera 15 minutos." };
   }
   await startSession(who);
+  await logAdmin("Entró al panel", undefined, who);
   redirect("/admin");
 }
 
@@ -46,12 +49,21 @@ export async function logout() {
 }
 
 // ---------- moderación ----------
+async function personOf(checkinId: string) {
+  const { data } = await db().from("checkins").select("media_type,participants(full_name),stores(name)").eq("id", checkinId).maybeSingle<{ media_type: string; participants: { full_name: string } | null; stores: { name: string } | null }>();
+  return data ? `${data.media_type} de ${data.participants?.full_name} en ${data.stores?.name}` : checkinId;
+}
+async function nameOf(participantId: string) {
+  const { data } = await db().from("participants").select("full_name,cedula").eq("id", participantId).maybeSingle();
+  return data ? `${data.full_name} (${data.cedula})` : participantId;
+}
 const status = z.enum(["aprobado", "pendiente", "rechazado"]);
 const uuid = z.string().uuid();
 
 export async function setCheckinStatus(id: string, s: ReviewStatus) {
   await requireAdmin();
   await db().from("checkins").update({ status: status.parse(s) }).eq("id", uuid.parse(id));
+  await logAdmin(s === "rechazado" ? "Rechazó registro" : "Aprobó registro", await personOf(id));
   revalidatePath("/admin", "layout");
   revalidatePath("/");
   revalidatePath("/galeria");
@@ -61,6 +73,7 @@ export async function setCheckinStatus(id: string, s: ReviewStatus) {
 export async function approveAsPhoto(id: string) {
   await requireAdmin();
   await db().from("checkins").update({ status: "aprobado", media_type: "foto" }).eq("id", uuid.parse(id));
+  await logAdmin("Contó video como foto", await personOf(id));
   revalidatePath("/admin", "layout");
   revalidatePath("/");
   revalidatePath("/galeria");
@@ -69,12 +82,14 @@ export async function approveAsPhoto(id: string) {
 export async function setClaimStatus(id: string, s: ReviewStatus) {
   await requireAdmin();
   await db().from("social_claims").update({ status: status.parse(s) }).eq("id", uuid.parse(id));
+  await logAdmin(s === "aprobado" ? "Aprobó Instagram" : "Rechazó Instagram", id);
   revalidatePath("/admin", "layout");
 }
 
 export async function setDisqualified(id: string, value: boolean) {
   await requireAdmin();
   await db().from("participants").update({ disqualified: value }).eq("id", uuid.parse(id));
+  await logAdmin(value ? "Anuló participante" : "Reactivó participante", await nameOf(id));
   revalidatePath("/admin", "layout");
 }
 
@@ -90,6 +105,7 @@ export async function deleteCheckin(id: string) {
   const sb = db();
   const { data } = await sb.from("checkins").select("photo_path,thumb_path").eq("id", uuid.parse(id)).maybeSingle();
   if (!data) return;
+  await logAdmin("Borró registro", await personOf(id));
   await sb.from("checkins").delete().eq("id", id);
   await removeFiles([data.photo_path, data.thumb_path]);
   revalidatePath("/admin", "layout");
@@ -108,9 +124,11 @@ export async function deleteParticipant(id: string): Promise<{ ok: boolean; erro
   const { count } = await sb.from("draws").select("id", { count: "exact", head: true }).eq("participant_id", pid);
   if (count) return { ok: false, error: "Esta persona aparece en el historial de sorteos. No se puede borrar; puedes anularla." };
   const { data: files } = await sb.from("checkins").select("photo_path,thumb_path").eq("participant_id", pid);
+  const who = await nameOf(pid);
   const { error } = await sb.from("participants").delete().eq("id", pid); // borra en cascada registros y publicaciones
   if (error) return { ok: false, error: "No se pudo borrar. Intenta de nuevo." };
   await removeFiles((files ?? []).flatMap((f) => [f.photo_path, f.thumb_path]));
+  await logAdmin("Borró participante", who);
   revalidatePath("/admin", "layout");
   revalidatePath("/");
   revalidatePath("/galeria");
@@ -132,6 +150,7 @@ export type DrawResult =
       chance: number;
       people: number;
       media: WinnerMedia[];
+      flags: Flag[];
     }
   | { ok: false; error: string };
 
@@ -157,6 +176,7 @@ export async function confirmDraw(drawId: string) {
     .from("draws")
     .update({ status: "confirmado", note: `${d?.note ?? ""} · confirmado por ${await currentAdmin()}`.replace(/^ · /, "") })
     .eq("id", uuid.parse(drawId));
+  await logAdmin("Confirmó ganador", drawId);
   revalidatePath("/admin", "layout");
 }
 
@@ -172,6 +192,7 @@ export async function voidDraw(drawId: string) {
     .select("participant_id")
     .single();
   if (data) await sb.from("participants").update({ disqualified: true }).eq("id", data.participant_id);
+  await logAdmin("Anuló ganador", data ? await nameOf(data.participant_id) : drawId);
   revalidatePath("/admin", "layout");
   revalidatePath("/");
 }
@@ -204,11 +225,13 @@ export async function runDraw(excludePrevious: boolean): Promise<DrawResult> {
     })
     .select("id")
     .single();
+  await logAdmin("Sorteó", `Salió ${winner.full_name} (${winner.points} de ${total} boletos)`);
   revalidatePath("/admin", "layout");
   return {
     ok: true,
     drawId: draw?.id ?? "",
     media: await participantMedia(winner.id),
+    flags: (await fraudFlags()).get(winner.id) ?? [],
     name: winner.full_name,
     cedula: winner.cedula,
     phone: winner.phone,
@@ -225,6 +248,7 @@ export async function setQrMode(mode: "auto" | "open" | "paused") {
   await requireAdmin();
   const m = z.enum(["auto", "open", "paused"]).parse(mode);
   await db().from("settings").upsert({ key: "qr_mode", value: m, updated_at: new Date().toISOString() });
+  await logAdmin("Cambió los QR", { auto: "Según fechas", open: "Abiertos", paused: "Pausados" }[m]);
   revalidatePath("/", "layout");
 }
 
@@ -259,6 +283,7 @@ export async function setRaffleSettings(_: unknown, fd: FormData) {
   if (error) return { ok: false, error: "No se pudo guardar.", note: "" };
   if (contestUrl) await sb.from("settings").upsert({ key: "contest_post_url", value: contestUrl, updated_at: now });
   else await sb.from("settings").delete().eq("key", "contest_post_url");
+  await logAdmin("Cambió fechas/video", `Inicio ${startsAt}, cierre ${closesAt}, anuncio ${announceAt}${contestUrl ? ", con video" : ", sin video"}`);
   revalidatePath("/", "layout");
   const today = localDay();
   return {
@@ -283,6 +308,7 @@ export async function createStore(_: unknown, fd: FormData) {
     "tienda";
   const { error } = await db().from("stores").insert({ name: p.data.name, city: p.data.city ?? null, slug: `${slug}-${randomBytes(2).toString("hex")}` });
   if (error) return { error: "No se pudo crear la tienda." };
+  await logAdmin("Creó tienda", p.data.name);
   revalidatePath("/admin", "layout");
   return { error: "" };
 }
@@ -290,6 +316,7 @@ export async function createStore(_: unknown, fd: FormData) {
 export async function toggleStore(id: string, active: boolean) {
   await requireAdmin();
   await db().from("stores").update({ active }).eq("id", uuid.parse(id));
+  await logAdmin(active ? "Activó tienda" : "Desactivó tienda", id);
   revalidatePath("/admin", "layout");
 }
 
@@ -297,5 +324,6 @@ export async function toggleStore(id: string, active: boolean) {
 export async function rotateToken(id: string) {
   await requireAdmin();
   await db().from("stores").update({ qr_token: randomBytes(9).toString("hex") }).eq("id", uuid.parse(id));
+  await logAdmin("Cambió el QR de una tienda", id);
   revalidatePath("/admin", "layout");
 }

@@ -139,3 +139,25 @@ export function uploadSigned(url: string, file: Blob, onProgress?: (p: number) =
     xhr.send(file);
   });
 }
+
+/**
+ * Huella visual (dHash de 64 bits): dos fotos iguales o casi iguales (recortadas, comprimidas,
+ * con otro brillo) dan huellas casi idénticas. Sirve para detectar fotos repetidas o copiadas.
+ */
+export async function visualHash(file: Blob): Promise<string | null> {
+  try {
+    const img = await loadImage(file);
+    const c = document.createElement("canvas");
+    c.width = 9;
+    c.height = 8;
+    const x = c.getContext("2d", { willReadFrequently: true })!;
+    x.drawImage(img, 0, 0, 9, 8);
+    const d = x.getImageData(0, 0, 9, 8).data;
+    const g = (i: number) => d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    let bits = "";
+    for (let y = 0; y < 8; y++) for (let k = 0; k < 8; k++) bits += g(y * 9 + k) > g(y * 9 + k + 1) ? "1" : "0";
+    return bits.match(/.{4}/g)!.map((b) => parseInt(b, 2).toString(16)).join("");
+  } catch {
+    return null;
+  }
+}

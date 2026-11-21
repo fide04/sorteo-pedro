@@ -1,12 +1,13 @@
 "use server";
 
+import { verifyTurnstile } from "@/lib/turnstile";
 import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db, BUCKET } from "@/lib/supabase";
 import { formatDate, localDay, RAFFLE, registrationState } from "@/lib/config";
 import { firstName, getPassport, getRaffleDates, storeByToken } from "@/lib/data";
-import { clearParticipant, getParticipantId, setParticipant } from "@/lib/session";
+import { clearParticipant, deviceId, getParticipantId, setParticipant } from "@/lib/session";
 import { cedulaSchema, newParticipantSchema, parseInstagramUrl, phoneSchema } from "@/lib/validation";
 import type { Passport } from "@/lib/types";
 
@@ -94,6 +95,22 @@ async function resolveParticipant(fd: FormData, requireInstagram = false): Promi
     if (existing.disqualified) return fail("Esta cédula no puede participar.");
     return { ok: true, id: existing.id };
   }
+  // Teléfono único: una persona = una cédula = un teléfono
+  const { data: phoneUsed } = await sb.from("participants").select("id").eq("phone", tel.data).maybeSingle();
+  if (phoneUsed) return fail("Ese teléfono ya está registrado con otra cédula. Usa tu propio número.");
+
+  // Límite de cuentas nuevas: 3 por dispositivo al día y 25 por conexión por hora (frena bots y cuentas falsas)
+  const dev = await deviceId();
+  const ip = await clientIp();
+  const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const hourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+  const [{ count: byDevice }, { count: byIp }] = await Promise.all([
+    sb.from("failed_attempts").select("id", { count: "exact", head: true }).eq("ip", "new-dev:" + dev).gte("created_at", dayAgo),
+    sb.from("failed_attempts").select("id", { count: "exact", head: true }).eq("ip", "new-ip:" + ip).gte("created_at", hourAgo),
+  ]);
+  if ((byDevice ?? 0) >= 3) return fail("Desde este teléfono ya se registraron varias personas hoy. Cada quien debe usar su propio teléfono.");
+  if ((byIp ?? 0) >= 25) return fail("Hay demasiados registros nuevos desde esta conexión. Intenta de nuevo en un rato.");
+
   const extra = newParticipantSchema.safeParse({
     fullName: fd.get("fullName") ?? "",
     instagram: fd.get("instagram") ?? "",
@@ -101,12 +118,18 @@ async function resolveParticipant(fd: FormData, requireInstagram = false): Promi
   });
   if (!extra.success) return fail(extra.error.issues[0].message);
   if (requireInstagram && !extra.data.instagram) return fail("Escribe tu usuario de Instagram: lo necesitamos para verificar tu comentario en el video del concurso.");
+  if (!(await verifyTurnstile(fd.get("cf-turnstile-response"), ip)))
+    return fail("No pudimos confirmar que eres una persona. Espera unos segundos y toca otra vez el botón.");
   const { data: created, error } = await sb
     .from("participants")
-    .insert({ cedula: ced.data, phone: tel.data, full_name: extra.data.fullName, instagram: extra.data.instagram })
+    .insert({ cedula: ced.data, phone: tel.data, full_name: extra.data.fullName, instagram: extra.data.instagram, device_id: dev })
     .select("id")
     .single();
-  if (!error) return { ok: true, id: created.id };
+  if (!error) {
+    await sb.from("failed_attempts").insert([{ ip: "new-dev:" + dev }, { ip: "new-ip:" + ip }]);
+    return { ok: true, id: created.id };
+  }
+  if (error.code === "23505" && error.message.includes("phone")) return fail("Ese teléfono ya está registrado con otra cédula. Usa tu propio número.");
   const { data: again } = await sb.from("participants").select("id").eq("cedula", ced.data).single();
   return again ? { ok: true, id: again.id } : fail("No pudimos crear tu registro. Intenta de nuevo.");
 }
@@ -152,7 +175,14 @@ export async function startCheckin(fd: FormData): Promise<
   return { ok: true, upload: { url: up.data.signedUrl, path }, thumb };
 }
 
-export async function finishCheckin(input: { token: string; path: string; thumbPath: string | null; kind: Kind }): Promise<
+export async function finishCheckin(input: {
+  token: string;
+  path: string;
+  thumbPath: string | null;
+  kind: Kind;
+  phash?: string | null;
+  takenAt?: number | null;
+}): Promise<
   { ok: true; passport: Passport; checkinId: string; storeName: string; gained: number; pendingVideo: boolean } | Fail
 > {
   const pid = await getParticipantId();
@@ -172,9 +202,18 @@ export async function finishCheckin(input: { token: string; path: string; thumbP
   if (!valid(input.path) || !input.path || !valid(input.thumbPath)) return fail("No pudimos verificar tu archivo. Intenta de nuevo.");
 
   const sb = db();
-  // ¿El archivo realmente subió?
-  const check = await sb.storage.from(BUCKET).createSignedUrl(input.path, 60);
-  if (check.error) return fail("Tu archivo no terminó de subir. Revisa tu conexión e intenta otra vez.");
+  // ¿El archivo realmente subió? ¿Tiene el tipo y el tamaño correctos? (no confiamos en lo que diga el teléfono)
+  const dir = input.path.slice(0, input.path.lastIndexOf("/"));
+  const file = input.path.slice(input.path.lastIndexOf("/") + 1);
+  const { data: listed } = await sb.storage.from(BUCKET).list(dir, { search: file, limit: 5 });
+  const meta = listed?.find((f) => f.name === file)?.metadata as { size?: number; mimetype?: string } | undefined;
+  if (!meta) return fail("Tu archivo no terminó de subir. Revisa tu conexión e intenta otra vez.");
+  const spec = MEDIA[input.kind];
+  const badType = meta.mimetype && !(spec.types as readonly string[]).includes(meta.mimetype);
+  if (badType || (meta.size ?? 0) > spec.max || (meta.size ?? 0) < 1000) {
+    await sb.storage.from(BUCKET).remove(input.thumbPath ? [input.path, input.thumbPath] : [input.path]);
+    return fail(input.kind === "video" ? "Ese video no es válido o pesa demasiado." : "Esa foto no es válida o pesa demasiado.");
+  }
   let thumbPath = input.thumbPath;
   if (thumbPath && (await sb.storage.from(BUCKET).createSignedUrl(thumbPath, 60)).error) thumbPath = null;
 
@@ -191,6 +230,13 @@ export async function finishCheckin(input: { token: string; path: string; thumbP
       thumb_path: thumbPath,
       media_type: input.kind,
       user_agent: ua,
+      device_id: await deviceId(),
+      ip: await clientIp(),
+      phash: input.phash && /^[0-9a-f]{16}$/.test(input.phash) ? input.phash : null,
+      taken_at:
+        input.takenAt && Number.isFinite(input.takenAt) && input.takenAt > 1.5e12 && input.takenAt < Date.now() + 3600e3
+          ? new Date(input.takenAt).toISOString()
+          : null,
     })
     .select("id")
     .single();

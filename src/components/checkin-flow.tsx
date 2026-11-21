@@ -10,10 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PassportView } from "@/components/passport-view";
-import { compressPhoto, storyImage, uploadSigned, videoInfo } from "@/lib/image";
+import { compressPhoto, storyImage, uploadSigned, videoInfo, visualHash } from "@/lib/image";
 import { RAFFLE } from "@/lib/config";
 import type { Passport } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from "@/components/turnstile";
 
 type Step = "id" | "datos" | "foto" | "listo";
 
@@ -28,6 +29,7 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
   const [thumb, setThumb] = useState<File | null>(null);
   const [kind, setKind] = useState<"foto" | "video">("foto");
   const [progress, setProgress] = useState<number | null>(null);
+  const [meta, setMeta] = useState<{ phash: string | null; takenAt: number | null }>({ phash: null, takenAt: null });
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
@@ -35,6 +37,8 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
   const [videoOk, setVideoOk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
+  const [human, setHuman] = useState("");
+  const tsRef = useRef<TurnstileHandle>(null);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
@@ -80,12 +84,14 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
         setVideoOk(false);
         setPhoto(f);
         setThumb(info.poster);
+        setMeta({ phash: info.poster ? await visualHash(info.poster) : null, takenAt: f.lastModified || null });
         setPreview(URL.createObjectURL(f));
       } else {
         const [small, mini] = await Promise.all([compressPhoto(f), compressPhoto(f, 600)]);
         setKind("foto");
         setPhoto(small);
         setThumb(mini);
+        setMeta({ phash: await visualHash(mini), takenAt: f.lastModified || null });
         setPreview(URL.createObjectURL(small));
       }
     } catch {
@@ -96,6 +102,7 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
   function send() {
     if (!photo) return setError("Toma una foto o graba un video en la tienda.");
     if (kind === "video" && !videoOk) return setError("Confirma que tu video cumple con lo que pedimos.");
+    if (isNew && TURNSTILE_SITE_KEY && !human) return setError("Estamos confirmando que eres una persona. Espera un segundo y vuelve a tocar el botón.");
     setError("");
     start(async () => {
       const fd = new FormData();
@@ -112,8 +119,10 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
         fd.set("fullName", form.fullName);
         fd.set("instagram", form.instagram);
         if (accept) fd.set("acceptRules", "on");
+        if (human) fd.set("cf-turnstile-response", human);
       }
       const prep = await startCheckin(fd);
+      if (isNew) tsRef.current?.reset(); // cada verificación sirve una sola vez
       if (!prep.ok) {
         setError(prep.error);
         toast.error(prep.error);
@@ -128,7 +137,7 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
         setProgress(null);
         return setError("Se cortó la subida. Revisa tu conexión e intenta otra vez.");
       }
-      const r = await finishCheckin({ token, path: prep.upload.path, thumbPath: prep.thumb?.path ?? null, kind });
+      const r = await finishCheckin({ token, path: prep.upload.path, thumbPath: prep.thumb?.path ?? null, kind, phash: meta.phash, takenAt: meta.takenAt });
       setProgress(null);
       if (!r.ok) {
         setError(r.error);
@@ -262,8 +271,9 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
             )}
           </div>
 
-          <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={pick} aria-label="Foto en la tienda" />
-          <input ref={videoRef} type="file" accept="video/*" className="sr-only" onChange={pick} aria-label="Video en la tienda" />
+          {/* capture: abre la cámara directo, para que la foto o el video se haga en la tienda en ese momento */}
+          <input ref={fileRef} type="file" accept="image/*" capture="user" className="sr-only" onChange={pick} aria-label="Foto en la tienda" />
+          <input ref={videoRef} type="file" accept="video/*" capture="user" className="sr-only" onChange={pick} aria-label="Video en la tienda" />
 
           {preview ? (
             <div className="relative overflow-hidden rounded-md border bg-black">
@@ -291,11 +301,11 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <MediaButton onClick={() => fileRef.current?.click()} icon={<Camera className="size-8" strokeWidth={1.75} />} label="Foto" points={RAFFLE.points.photo} />
+              <MediaButton onClick={() => fileRef.current?.click()} icon={<Camera className="size-8" strokeWidth={1.75} />} label="Tomar foto" points={RAFFLE.points.photo} />
               <MediaButton
                 onClick={() => videoRef.current?.click()}
                 icon={<Video className="size-8" strokeWidth={1.75} />}
-                label={`Video creativo, hasta ${RAFFLE.maxVideoSeconds} s`}
+                label={`Grabar video, hasta ${RAFFLE.maxVideoSeconds} s`}
                 points={RAFFLE.points.video}
                 highlight
               />
@@ -331,6 +341,8 @@ export function CheckinFlow({ token, storeName, known, contestUrl }: { token: st
               </p>
             </div>
           )}
+
+          {isNew && <Turnstile ref={tsRef} onToken={setHuman} />}
 
           <Button variant="cta" size="xl" className="w-full" disabled={!photo || pending} onClick={send}>
             {pending && <Loader2 className="animate-spin" />}
